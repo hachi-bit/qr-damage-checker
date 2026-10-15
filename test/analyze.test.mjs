@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { readBarcodes, writeBarcode, prepareZXingModule } from 'zxing-wasm/full';
 import { analyze } from '../js/analyze.js';
 import { getBlockInfo } from '../js/tables.js';
+import { findDamage } from '../js/damagemap.js';
 
 prepareZXingModule({
   overrides: {
@@ -134,4 +135,44 @@ test('ブロック構成表の整合性', () => {
     }
   }
   assert.deepEqual(getBlockInfo('QR', 40, 'H'), { totalCodewords: 3706, blocks: 81, eccPerBlock: 30 });
+});
+
+test('無傷のQRコードは、全バージョンで理想の模様と完全に一致する', async () => {
+  for (let v = 1; v <= 40; v++) {
+    const level = 'LMQH'[v % 4];
+    const mask = v % 8;
+    const symbol = await make('QRCode', `ecLevel=${level},version=${v},dataMask=${mask}`, `V${v}`);
+    const map = findDamage(symbol, v, level, mask);
+    assert.ok(map, `${v}-${level}`);
+    assert.equal(map.damaged.length, 0, `${v}-${level}`);
+  }
+});
+
+test('壊したマスがそのまま破損箇所として出る', async () => {
+  const symbol = await make('QRCode', 'ecLevel=H,version=1', 'HELLO');
+  // データ部分（最初の3コードワード）と、タイミングパターンと形式情報を1マスずつ壊す
+  const isData = (x, y) => x >= 19 && y >= 9;
+  const isFunc = (x, y) => (x === 10 && y === 6) || (x === 8 && y === 1);
+  const [r] = await read(render(symbol, (x, y) => isData(x, y) || isFunc(x, y)));
+  assert.equal(r.valid, true);
+  const key = (d) => `${d.x},${d.y}`;
+  const data = r.damageMap.damaged.filter((d) => d.kind === 'data').map(key).sort();
+  const func = r.damageMap.damaged.filter((d) => d.kind === 'function').map(key).sort();
+  const expectData = [];
+  for (let y = 9; y <= 20; y++) for (const x of [19, 20]) expectData.push(`${x},${y}`);
+  assert.deepEqual(data, expectData.sort());
+  assert.deepEqual(func, ['10,6', '8,1']);
+  // 自前の復号で数えた誤り数と、読み取りライブラリの値が一致する
+  assert.equal(r.damageMap.maxErrors, r.blocks.corrected);
+});
+
+test('鏡像のQRコードでも、写真上の位置で破損箇所が出る', async () => {
+  const symbol = await make('QRCode', 'ecLevel=H,version=2', 'MIRROR');
+  const n = symbol.width;
+  const mirrored = { width: n, height: n, data: symbol.data.map((_, i) => symbol.data[(i % n) * n + Math.floor(i / n)]) };
+  const damagedArea = (x, y) => x >= n - 6 && x < n - 1 && y >= n - 3 && y < n - 1;
+  const [r] = await read(render(mirrored, damagedArea));
+  assert.equal(r.mirrored, true);
+  assert.ok(r.damageMap.damaged.length > 0);
+  for (const d of r.damageMap.damaged) assert.ok(damagedArea(d.x, d.y), `${d.x},${d.y}`);
 });

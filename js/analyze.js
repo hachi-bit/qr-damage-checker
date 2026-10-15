@@ -1,5 +1,6 @@
 // zxing-wasm の読み取り結果から、表示用の規格情報と破損率を組み立てる
 import { getBlockInfo } from './tables.js';
+import { findDamage } from './damagemap.js';
 
 const EC_RECOVERY = { L: '約7%', M: '約15%', Q: '約25%', H: '約30%' };
 
@@ -76,6 +77,12 @@ export function analyze(r) {
     blocks = { ...info, maxCorrectable, corrected };
   }
 
+  // 壊れているマスの位置（QRコード モデル2で、読み取れたものだけ）
+  let damageMap = null;
+  if (r.isValid && version.kind === 'QR' && !isModel1 && typeof extra.DataMask === 'number') {
+    damageMap = findDamage(r.symbol, version.number, ecLevel, extra.DataMask);
+  }
+
   return {
     text: r.text,
     formatName: formatName(r.format, r.symbologyIdentifier),
@@ -86,6 +93,7 @@ export function analyze(r) {
     damage,
     rating: rate(damage),
     blocks,
+    damageMap,
     valid: r.isValid,
     inverted: !!r.isInverted,
     mirrored: !!r.isMirrored,

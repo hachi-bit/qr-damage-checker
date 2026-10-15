@@ -31,7 +31,12 @@ const els = {
   output: $('output'),
   canvas: $('canvas'),
   results: $('results'),
+  showDamage: $('show-damage'),
 };
+
+els.showDamage.addEventListener('change', () => {
+  if (last) drawOverlay(last.source, last.results);
+});
 
 const ready = prepareZXingModule({
   overrides: {
@@ -60,8 +65,56 @@ function percent(damage) {
   return `${Math.round(damage * 100)}%`;
 }
 
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
+}
+
 function ratingColor(key) {
-  return getComputedStyle(document.documentElement).getPropertyValue(`--${key}`).trim() || '#888';
+  return cssVar(`--${key}`);
+}
+
+/** 単位正方形 (0,0)-(1,1) を四角形 p に写す射影変換を返す */
+function squareToQuad(p) {
+  const { topLeft: a, topRight: b, bottomRight: c, bottomLeft: d } = p;
+  const sx = a.x - b.x + c.x - d.x;
+  const sy = a.y - b.y + c.y - d.y;
+  let g = 0;
+  let h = 0;
+  if (sx !== 0 || sy !== 0) {
+    const dx1 = b.x - c.x;
+    const dx2 = d.x - c.x;
+    const dy1 = b.y - c.y;
+    const dy2 = d.y - c.y;
+    const den = dx1 * dy2 - dx2 * dy1;
+    g = (sx * dy2 - dx2 * sy) / den;
+    h = (dx1 * sy - sx * dy1) / den;
+  }
+  const m = [b.x - a.x + g * b.x, d.x - a.x + h * d.x, a.x, b.y - a.y + g * b.y, d.y - a.y + h * d.y, a.y];
+  return (u, v) => {
+    const w = g * u + h * v + 1;
+    return [(m[0] * u + m[1] * v + m[2]) / w, (m[3] * u + m[4] * v + m[5]) / w];
+  };
+}
+
+const DAMAGE_COLOR = { data: '--danger', function: '--warn' };
+
+/** 写真の上に、壊れているマスを塗る */
+function drawDamageOnPhoto(ctx, r) {
+  const map = r.damageMap;
+  if (!map || !r.position || map.damaged.length === 0) return;
+  const toImage = squareToQuad(r.position);
+  const n = map.size;
+  ctx.save();
+  ctx.globalAlpha = 0.65;
+  for (const d of map.damaged) {
+    ctx.fillStyle = cssVar(DAMAGE_COLOR[d.kind]);
+    const corners = [[d.x, d.y], [d.x + 1, d.y], [d.x + 1, d.y + 1], [d.x, d.y + 1]].map(([x, y]) => toImage(x / n, y / n));
+    ctx.beginPath();
+    corners.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawOverlay(source, results) {
@@ -71,6 +124,7 @@ function drawOverlay(source, results) {
   const ctx = canvas.getContext('2d');
   ctx.drawImage(source, 0, 0);
   const line = Math.max(3, Math.round(Math.min(canvas.width, canvas.height) / 200));
+  if (els.showDamage.checked) results.forEach((r) => drawDamageOnPhoto(ctx, r));
   results.forEach((r, i) => {
     const p = r.position;
     if (!p) return;
@@ -115,6 +169,51 @@ function row(label, value) {
   return [el('dt', {}, label), el('dd', {}, value)];
 }
 
+/** QRコードの拡大図を描き、壊れているマスを塗る */
+function renderZoom(map) {
+  const n = map.size;
+  const quiet = 2;
+  const cell = Math.max(3, Math.floor(280 / (n + quiet * 2)));
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = (n + quiet * 2) * cell;
+  canvas.className = 'zoom';
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#000';
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      if (map.grid[y * n + x]) ctx.fillRect((x + quiet) * cell, (y + quiet) * cell, cell, cell);
+    }
+  }
+  ctx.globalAlpha = 0.75;
+  for (const d of map.damaged) {
+    ctx.fillStyle = cssVar(DAMAGE_COLOR[d.kind]);
+    ctx.fillRect((d.x + quiet) * cell, (d.y + quiet) * cell, cell, cell);
+  }
+  return canvas;
+}
+
+function renderDamageSection(r) {
+  const title = el('h3', {}, '破損箇所');
+  if (r.damage === Infinity) {
+    return el('section', { class: 'damage-map' }, title, el('p', { class: 'note' }, '読み取れないため、正しい模様が分からず破損箇所は表示できません。'));
+  }
+  if (!r.damageMap) {
+    return el('section', { class: 'damage-map' }, title, el('p', { class: 'note' }, 'この規格では破損箇所の表示に対応していません（通常のQRコード モデル2のみ対応）。'));
+  }
+  const data = r.damageMap.damaged.filter((d) => d.kind === 'data').length;
+  const func = r.damageMap.damaged.length - data;
+  const legend = el(
+    'ul',
+    { class: 'legend' },
+    el('li', {}, el('span', { class: 'swatch data' }), `データ部分の傷：${data}マス（破損率に入る）`),
+    el('li', {}, el('span', { class: 'swatch function' }), `目印などの傷：${func}マス（破損率には入らない）`),
+  );
+  const note = data + func === 0 ? el('p', { class: 'note' }, '壊れているマスはありません。') : null;
+  return el('section', { class: 'damage-map' }, title, renderZoom(r.damageMap), legend, note);
+}
+
 function renderCard(r, index) {
   const failed = r.damage === Infinity;
   const known = r.damage !== null && !failed;
@@ -157,10 +256,22 @@ function renderCard(r, index) {
   if (notes.length) rows.push(...row('備考', notes.join('・')));
   if (!failed) rows.push(...row('内容', el('span', { class: 'content' }, r.text)));
 
-  return el('article', { class: `card rating-${r.rating.key}` }, head, damage, meter, detail, el('dl', {}, ...rows));
+  return el(
+    'article',
+    { class: `card rating-${r.rating.key}` },
+    head,
+    damage,
+    meter,
+    detail,
+    el('dl', {}, ...rows),
+    renderDamageSection(r),
+  );
 }
 
+let last = null;
+
 function showResults(source, results) {
+  last = { source, results };
   drawOverlay(source, results);
   els.results.replaceChildren(...results.map(renderCard));
   els.output.hidden = false;

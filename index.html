@@ -44,7 +44,10 @@
       <p id="status" class="status" role="status"></p>
 
       <section id="output" class="output" hidden aria-label="結果">
-        <div class="preview"><canvas id="canvas"></canvas></div>
+        <div class="preview">
+          <canvas id="canvas"></canvas>
+          <label class="toggle"><input id="show-damage" type="checkbox" checked /> 写真に破損箇所を重ねる</label>
+        </div>
         <div id="results" class="results"></div>
       </section>
 
@@ -57,6 +60,7 @@
           <li>読み取り不可：QRコードは見つかったが、傷が訂正の上限を超えている</li>
         </ul>
         <p>QRコードの中身は複数の「ブロック」に分かれていて、それぞれ別々に訂正されます。どれか1つでも上限を超えると読めなくなるため、破損率は<strong>最も傷んだブロック</strong>の値で示します。</p>
+        <p>破損箇所は、誤り訂正で復元した「本来の模様」と写った模様を1マスずつ比べて求めています。赤はデータ部分の傷で破損率に入ります。オレンジは四隅の目印（位置検出パターン）や形式情報などの傷で、破損率には入りませんが、壊れると読み取りにくくなります。</p>
         <p>写真のピントやぼけ、照明の反射も「破損」として数えられます。印刷物そのものの傷み具合を調べるときは、正面から、明るく、ピントを合わせて撮影してください。</p>
       </details>
     </main>

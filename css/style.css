@@ -185,6 +185,69 @@ a {
   background: var(--surface);
 }
 
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.damage-map {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.damage-map h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+.zoom {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.legend {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border-radius: 2px;
+}
+
+.swatch.data {
+  background: var(--danger);
+}
+
+.swatch.function {
+  background: var(--warn);
+}
+
+.note {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
 .results {
   display: grid;
   gap: 12px;
