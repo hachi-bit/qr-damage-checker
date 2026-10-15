@@ -1,0 +1,6 @@
+zxing-wasm 3.1.5 (https://github.com/Sec-ant/zxing-wasm) — MIT License, see LICENSE.
+The WebAssembly binary is built from zxing-cpp (https://github.com/zxing-cpp/zxing-cpp),
+licensed under the Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
+Files copied unmodified from the npm package:
+  dist/iife/reader/index.js -> zxing-reader.iife.js
+  dist/reader/zxing_reader.wasm -> zxing_reader.wasm
